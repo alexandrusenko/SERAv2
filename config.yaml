@@ -1,0 +1,24 @@
+runtime:
+  model_path: "Qwen3.5-27B-Q4_K_M.gguf"
+  n_ctx: 32768
+  n_gpu_layers: -1
+  n_batch: 1024
+  threads: 12
+  temperature: 0.15
+  top_p: 0.92
+  repeat_penalty: 1.05
+  verbose: false
+
+memory:
+  db_path: "data/memory.sqlite3"
+  max_results: 12
+
+safety:
+  allow_shell: false
+  allow_network: true
+  allow_python_execution: false
+  working_dir: "workspace"
+
+log_level: "INFO"
+planner_max_steps: 12
+improve_after_failures: 2

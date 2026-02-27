@@ -1,0 +1,43 @@
+[project]
+name = "sera-agent"
+version = "0.1.0"
+description = "Self-improving local AI agent architecture for Windows + CUDA + GGUF"
+requires-python = ">=3.14"
+dependencies = [
+  "llama-cpp-python>=0.3.9",
+  "pydantic>=2.11.0",
+  "typing-extensions>=4.14.0",
+  "rich>=14.0.0",
+  "pyyaml>=6.0.2",
+  "tenacity>=9.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.12.0",
+  "mypy>=1.16.0",
+]
+
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+mypy_path = "src"
