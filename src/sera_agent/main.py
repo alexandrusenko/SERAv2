@@ -21,7 +21,12 @@ def build_agent(config_path: Path) -> SeraAgent:
 
     safety = SafetyPolicy(config.safety)
     llm = LLMEngine(config.runtime)
-    memory = MemoryStore(config.memory.db_path)
+    memory = MemoryStore(
+        config.memory.db_path,
+        long_term_chunk_size=config.memory.long_term_chunk_size,
+        short_term_search_limit=config.memory.short_term_search_limit,
+        long_term_search_limit=config.memory.long_term_search_limit,
+    )
     registry = ToolRegistry()
     registry.register(ReadFileTool(safety=safety))
     registry.register(WriteFileTool(safety=safety))
