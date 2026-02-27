@@ -12,6 +12,9 @@ runtime:
 memory:
   db_path: "data/memory.sqlite3"
   max_results: 12
+  long_term_chunk_size: 8
+  short_term_search_limit: 40
+  long_term_search_limit: 40
 
 safety:
   allow_shell: false

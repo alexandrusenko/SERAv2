@@ -21,6 +21,9 @@ class RuntimeConfig(BaseModel):
 class MemoryConfig(BaseModel):
     db_path: Path = Path("data/memory.sqlite3")
     max_results: PositiveInt = 10
+    long_term_chunk_size: PositiveInt = 8
+    short_term_search_limit: PositiveInt = 40
+    long_term_search_limit: PositiveInt = 40
 
 
 class SafetyConfig(BaseModel):
