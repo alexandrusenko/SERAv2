@@ -107,8 +107,19 @@ class SeraAgent:
             if not self.tools.has(name):
                 self.improver.attempt_create_missing_tool(missing_tool=name, task_context=f"Task: {task}; Step: {step}")
                 self._emit(event_handler, "log", f"Инструмент {name} отсутствовал, запущено самоулучшение")
+                if not self.tools.has(name):
+                    outputs.append(f"{name}: success=False output=Tool is unavailable")
+                    continue
+
             tool = self.tools.get(name)
-            result = tool.run(args)
+            try:
+                result = tool.run(args)
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.exception("Tool call failed: %s", name)
+                error_output = f"Tool error: {exc}"
+                outputs.append(f"{name}: success=False output={error_output[:500]}")
+                continue
+
             self._emit(event_handler, "log", f"Результат {name}: success={result.success}")
             outputs.append(f"{name}: success={result.success} output={result.output[:500]}")
 

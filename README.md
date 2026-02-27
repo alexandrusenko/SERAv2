@@ -30,6 +30,12 @@ pip install -e .
 python -m sera_agent.main --config config.yaml "Собери план миграции проекта на Python 3.14"
 ```
 
+## Режимы запуска
+
+- Одноразовый CLI-запрос: `python -m sera_agent.main --config config.yaml "..."`
+- Интерактивный CLI (ожидание новых задач): `python -m sera_agent.main --config config.yaml`
+- HTTP UI-сервис: `python -m sera_agent.main --serve --host 0.0.0.0 --port 8000`
+
 ## UI в реальном времени
 
 Теперь с агентом можно общаться через веб-интерфейс: чат слева, детальные логи выполнения справа.
