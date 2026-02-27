@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from sera_agent.config.models import AgentConfig
@@ -13,6 +14,8 @@ from sera_agent.self_improve.improver import SelfImprover
 from sera_agent.tools.base import ToolRegistry
 from sera_agent.tools.builtin import HttpGetTool, ReadFileTool, ShellTool, WriteFileTool
 from sera_agent.tools.dynamic_loader import DynamicToolLoader
+
+LOGGER = logging.getLogger(__name__)
 
 
 def build_agent(config_path: Path) -> SeraAgent:
@@ -45,8 +48,13 @@ def main() -> None:
     args = parser.parse_args()
 
     agent = build_agent(args.config)
-    result = agent.run(args.task)
-    print(result)
+    try:
+        result = agent.run(args.task)
+        print(result)
+    except RuntimeError as exc:
+        LOGGER.error("Agent failed to start or run: %s", exc)
+        print(f"ERROR: {exc}")
+        raise SystemExit(2) from exc
 
 
 if __name__ == "__main__":

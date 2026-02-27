@@ -40,6 +40,15 @@ uvicorn sera_agent.ui.server:app --host 0.0.0.0 --port 8000
 
 После запуска откройте `http://localhost:8000`.
 
+
+## Типичные проблемы при запуске
+
+- `Failed to load model from file` / `Failed to initialize llama-cpp model`:
+  - проверьте, что `runtime.model_path` указывает на существующий `.gguf` файл;
+  - убедитесь, что файл не повреждён и совместим с вашей версией `llama-cpp-python`;
+  - для больших моделей проверьте доступную RAM/VRAM и параметры offload.
+  - если видите `AttributeError: 'LlamaModel' object has no attribute 'sampler'`, обычно это проблема версии `llama-cpp-python`/Python; обновите `llama-cpp-python` и при необходимости используйте Python 3.12/3.13.
+
 ## Безопасность
 
 По умолчанию shell-исполнение отключено (`allow_shell: false`). Включайте только если осознанно доверяете окружению.
