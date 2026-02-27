@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 from sera_agent.config.models import AgentConfig
@@ -14,6 +15,8 @@ from sera_agent.tools.base import ToolRegistry
 from sera_agent.tools.builtin import HttpGetTool, ReadFileTool, ShellTool, WriteFileTool
 from sera_agent.tools.dynamic_loader import DynamicToolLoader
 
+LOGGER = logging.getLogger(__name__)
+
 
 def build_agent(config_path: Path) -> SeraAgent:
     config = AgentConfig.from_yaml(config_path)
@@ -21,7 +24,12 @@ def build_agent(config_path: Path) -> SeraAgent:
 
     safety = SafetyPolicy(config.safety)
     llm = LLMEngine(config.runtime)
-    memory = MemoryStore(config.memory.db_path)
+    memory = MemoryStore(
+        config.memory.db_path,
+        long_term_chunk_size=config.memory.long_term_chunk_size,
+        short_term_search_limit=config.memory.short_term_search_limit,
+        long_term_search_limit=config.memory.long_term_search_limit,
+    )
     registry = ToolRegistry()
     registry.register(ReadFileTool(safety=safety))
     registry.register(WriteFileTool(safety=safety))
@@ -40,8 +48,13 @@ def main() -> None:
     args = parser.parse_args()
 
     agent = build_agent(args.config)
-    result = agent.run(args.task)
-    print(result)
+    try:
+        result = agent.run(args.task)
+        print(result)
+    except RuntimeError as exc:
+        LOGGER.error("Agent failed to start or run: %s", exc)
+        print(f"ERROR: {exc}")
+        raise SystemExit(2) from exc
 
 
 if __name__ == "__main__":
