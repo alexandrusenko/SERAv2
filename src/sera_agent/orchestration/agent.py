@@ -4,7 +4,11 @@ import json
 import logging
 import re
 from textwrap import dedent
-from typing import Callable
+from typing import Any, Callable
+
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda
 
 from sera_agent.config.models import AgentConfig
 from sera_agent.core.types import MemoryItem, StepResult, ToolCall
@@ -17,6 +21,21 @@ LOGGER = logging.getLogger(__name__)
 
 
 class SeraAgent:
+    SUPERVISOR_PROMPT = dedent(
+        """
+        Ты — SERA, главный модуль Supervisor в многоагентной архитектуре.
+        Твоя роль: принимать управленческое решение по входной задаче.
+
+        Твои режимы:
+        - direct: ответить сразу без планирования и инструментов.
+        - task: запустить полный контур (Planner -> Actor -> Critic).
+        - idle: перейти в режим мета-познания (самообучение в простое).
+
+        Выбирай режим строго по смыслу запроса.
+        Возвращай только JSON.
+        """
+    ).strip()
+
     def __init__(
         self,
         config: AgentConfig,
@@ -33,12 +52,103 @@ class SeraAgent:
         self.scratchpad_path = self.config.safety.working_dir / "memory.md"
         self.idle_reflection_threshold_seconds = 600
 
+    def _invoke_chat_completion(self, payload: dict[str, str], max_tokens: int = 1024) -> str:
+        system = payload.get("system", "")
+        user = payload.get("user", "")
+        return self.llm.complete(system=system, user=user, max_tokens=max_tokens)
+
+    def _invoke_json_chain(
+        self,
+        *,
+        system: str,
+        user: str,
+        schema_hint: str,
+        max_tokens: int = 1024,
+    ) -> dict[str, Any]:
+        if hasattr(self.llm, "complete_json"):
+            payload = self.llm.complete_json(system=system, user=user, schema_hint=schema_hint, max_tokens=max_tokens)
+            return dict(payload)
+
+        parser = JsonOutputParser()
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", "{system}"),
+                (
+                    "user",
+                    "{user}\n\nВерни строго JSON по схеме:\n{schema_hint}\n"
+                    "Без markdown, пояснений и дополнительных полей.",
+                ),
+            ]
+        )
+        llm_runnable = RunnableLambda(
+            lambda messages: self._invoke_chat_completion(
+                {
+                    "system": str(messages[0].content),
+                    "user": str(messages[-1].content),
+                },
+                max_tokens=max_tokens,
+            )
+        )
+        chain = prompt | llm_runnable | parser
+        return dict(chain.invoke({"system": system, "user": user, "schema_hint": schema_hint}))
+
+    def _invoke_text_chain(self, *, system: str, user: str, max_tokens: int = 600) -> str:
+        if hasattr(self.llm, "complete"):
+            prompt = ChatPromptTemplate.from_messages([("system", "{system}"), ("user", "{user}")])
+            llm_runnable = RunnableLambda(
+                lambda messages: self._invoke_chat_completion(
+                    {
+                        "system": str(messages[0].content),
+                        "user": str(messages[-1].content),
+                    },
+                    max_tokens=max_tokens,
+                )
+            )
+            chain = prompt | llm_runnable | StrOutputParser()
+            return str(chain.invoke({"system": system, "user": user})).strip()
+
+        fallback = self._invoke_json_chain(
+            system=system,
+            user=user,
+            schema_hint='{"final_output":"..."}',
+            max_tokens=max_tokens,
+        )
+        return str(fallback.get("final_output") or fallback.get("answer") or "").strip()
+
     def _supervisor_route(self, task: str) -> str:
         if not task.strip():
             return "idle"
         if self._is_simple_question(task):
             return "direct"
-        return "task"
+
+        if not hasattr(self.llm, "complete"):
+            return "task"
+
+        schema_hint = '{"route":"direct|task|idle","reason":"краткое объяснение"}'
+        user = dedent(
+            f"""
+            Входная задача пользователя:
+            {task}
+
+            Выбери режим работы Supervisor.
+            """
+        ).strip()
+        try:
+            payload = self._invoke_json_chain(
+                system=self.SUPERVISOR_PROMPT,
+                user=user,
+                schema_hint=schema_hint,
+                max_tokens=300,
+            )
+            route = str(payload.get("route", "task")).strip().lower()
+            if route in {"direct", "task", "idle"}:
+                return route
+            return "task"
+        except Exception:  # noqa: BLE001
+            LOGGER.exception("Supervisor routing via LLM failed, fallback to heuristic route")
+            if self._is_simple_question(task):
+                return "direct"
+            return "task"
 
     def _emit(
         self,
@@ -67,15 +177,15 @@ class SeraAgent:
         return any(normalized == pattern for pattern in quick_patterns)
 
     def _answer_directly(self, task: str) -> str:
-        system = "You are a concise assistant. Answer directly and do not plan or call any tools."
+        system = "Ты SERA. Отвечай кратко и по делу на языке пользователя. Не строй план и не вызывай инструменты."
         user = dedent(
             f"""
-            User task: {task}
+            Задача пользователя: {task}
 
-            Provide a short direct answer in the same language as the user.
+            Дай прямой краткий ответ.
             """
         ).strip()
-        return self.llm.complete(system=system, user=user, max_tokens=300).strip()
+        return self._invoke_text_chain(system=system, user=user, max_tokens=300)
 
     def _summarize_final_answer(self, task: str, transcripts: list[str]) -> str:
         raw_result = "\n\n".join(transcripts).strip()
@@ -86,21 +196,21 @@ class SeraAgent:
             return raw_result
 
         system = (
-            "You are a helpful assistant. Provide one final user-facing answer based on completed steps. "
-            "Do not include internal logs or step-by-step execution traces."
+            "Ты SERA. Подготовь один итоговый ответ для пользователя на основе выполненных шагов. "
+            "Не включай внутренние логи и служебные трассировки."
         )
         user = dedent(
             f"""
-            Original user task: {task}
+            Исходная задача пользователя: {task}
 
-            Agent execution transcript:
+            Транскрипт выполнения агента (Agent execution transcript):
             {raw_result}
 
-            Produce a concise final response in the same language as the user's task.
+            Сформируй короткий финальный ответ на языке пользователя.
             """
         ).strip()
         try:
-            summarized = self.llm.complete(system=system, user=user, max_tokens=600).strip()
+            summarized = self._invoke_text_chain(system=system, user=user, max_tokens=600)
             return summarized or raw_result
         except Exception:  # noqa: BLE001
             LOGGER.exception("Failed to synthesize final answer from transcript")
@@ -112,19 +222,19 @@ class SeraAgent:
         self._emit(event_handler, "log", f"Найдено записей памяти: {len(context)}")
         context_block = "\n".join(f"[{m.role}] {m.content}" for m in context)
 
-        system = "You are a deliberate planner. Create robust step-by-step plans."
+        system = "Ты модуль Planner в SERA. Составь устойчивый пошаговый план выполнения задачи."
         user = dedent(
             f"""
-            Task: {task}
-            Available tools:
+            Задача: {task}
+            Доступные инструменты:
             {self.tools.descriptions()}
 
-            Relevant memory:
+            Релевантная память:
             {context_block}
             """
         ).strip()
         schema_hint = '{"steps": ["step1", "step2"]}'
-        payload = self.llm.complete_json(system=system, user=user, schema_hint=schema_hint)
+        payload = self._invoke_json_chain(system=system, user=user, schema_hint=schema_hint)
         steps = payload.get("steps", [])
         if not isinstance(steps, list) or not steps:
             raise ValueError("Planner produced empty plan")
@@ -133,20 +243,20 @@ class SeraAgent:
         return plan
 
     def _replan(self, task: str, failed_step: str, critique: str, previous_plan: list[str]) -> list[str]:
-        system = "You are a resilient planner. Replan after failures while keeping objective unchanged."
+        system = "Ты модуль Planner в SERA. Перепланируй задачу после провала шага, не меняя цель."
         user = dedent(
             f"""
-            Global task: {task}
-            Previous plan:
+            Глобальная задача: {task}
+            Предыдущий план:
             {json.dumps(previous_plan, ensure_ascii=False)}
-            Failed step: {failed_step}
-            Critic feedback: {critique}
+            Проваленный шаг: {failed_step}
+            Комментарий Critic: {critique}
 
-            Return JSON with field "steps": a new robust plan.
+            Верни новый рабочий план.
             """
         ).strip()
         schema_hint = '{"steps": ["step1", "step2"]}'
-        payload = self.llm.complete_json(system=system, user=user, schema_hint=schema_hint)
+        payload = self._invoke_json_chain(system=system, user=user, schema_hint=schema_hint)
         steps = payload.get("steps", [])
         if not isinstance(steps, list) or not steps:
             return previous_plan
@@ -192,24 +302,22 @@ class SeraAgent:
 
     def _reflect_on_failure(self, task: str, step: str, output: str) -> tuple[str, list[str]]:
         scratchpad = self._read_scratchpad()
-        system = "You are a strict critic. Explain why the attempt failed and how to adapt the next action."
+        system = "Ты модуль Critic в SERA. Объясни причину ошибки простыми словами и предложи исправление."
         user = dedent(
             f"""
-            Task: {task}
-            Failed step: {step}
-            Failure details:
+            Задача: {task}
+            Проваленный шаг: {step}
+            Детали ошибки:
             {output}
 
-            Scratchpad state:
+            Текущее состояние scratchpad:
             {scratchpad}
 
-            Return JSON with fields:
-            - critique: string
-            - next_steps: list of short strings
+            Верни диагностику и адаптацию.
             """
         ).strip()
         schema_hint = '{"critique":"...","next_steps":["..."]}'
-        payload = self.llm.complete_json(system=system, user=user, schema_hint=schema_hint, max_tokens=1200)
+        payload = self._invoke_json_chain(system=system, user=user, schema_hint=schema_hint, max_tokens=1200)
         critique = str(payload.get("critique") or payload.get("thought") or payload.get("final_output") or "No critique")
         next_steps_raw = payload.get("next_steps", [])
         next_steps = [str(item) for item in next_steps_raw if str(item).strip()]
@@ -231,26 +339,25 @@ class SeraAgent:
         event_handler: Callable[[dict[str, str]], None] | None = None,
     ) -> StepResult:
         self._emit(event_handler, "log", f"Подготовка шага: {step}")
-        system = "You are the Actor module. Execute one step, choose tools, and report verifiable result. For casual greetings or basic knowledge, avoid network tools unless the user explicitly asks to search online or current web data is required."
+        system = (
+            "Ты модуль Actor в SERA. Выполни один шаг, при необходимости выбери инструменты и верни проверяемый результат. "
+            "Для приветствий и базовых знаний не используй сетевые инструменты без явного запроса пользователя."
+        )
         user = dedent(
             f"""
-            Global task: {task}
-            Current step: {step}
-            Available tools:
+            Глобальная задача: {task}
+            Текущий шаг: {step}
+            Доступные инструменты:
             {self.tools.descriptions()}
 
-            Return JSON with fields:
-            - thought: string
-            - tool_calls: list of {{name: string, arguments: object}}
-            - final_output: string
-            - success: boolean
+            Верни действие и результат.
             """
         ).strip()
         schema_hint = (
             '{"thought":"...","tool_calls":[{"name":"read_file","arguments":{"path":"a.txt"}}],'
             '"final_output":"...","success":true}'
         )
-        payload = self.llm.complete_json(system=system, user=user, schema_hint=schema_hint, max_tokens=1500)
+        payload = self._invoke_json_chain(system=system, user=user, schema_hint=schema_hint, max_tokens=1500)
         calls_raw = payload.get("tool_calls", [])
         tool_calls: list[ToolCall] = []
         outputs: list[str] = []
@@ -331,20 +438,17 @@ class SeraAgent:
         self._emit(event_handler, "log", "Idle mode: запуск мета-познания")
         failures = self.memory.search("error failure exception", limit=6)
         failure_context = "\n".join(f"[{item.role}] {item.content}" for item in failures)
-        system = "You are the Metacognition module. Generate one practical self-improvement task."
+        system = "Ты модуль Metacognition в SERA. Сгенерируй одну практичную задачу самообучения."
         user = dedent(
             f"""
-            Recent failure context:
+            Контекст недавних ошибок:
             {failure_context}
 
-            Return JSON with fields:
-            - learning_goal: string
-            - experiment_plan: list of strings
-            - self_test: string (a tiny verifiable check)
+            Предложи микро-цикл обучения.
             """
         ).strip()
         schema_hint = '{"learning_goal":"...","experiment_plan":["..."],"self_test":"..."}'
-        payload = self.llm.complete_json(system=system, user=user, schema_hint=schema_hint, max_tokens=1200)
+        payload = self._invoke_json_chain(system=system, user=user, schema_hint=schema_hint, max_tokens=1200)
         goal = str(payload.get("learning_goal") or "Уточнить пробелы в навыках")
         plan = payload.get("experiment_plan") or []
         steps = [str(item) for item in plan if str(item).strip()]
@@ -376,7 +480,7 @@ class SeraAgent:
             return idle_result
 
         if route == "direct":
-            self._emit(event_handler, "log", "Простой запрос: отвечаю сразу без планирования")
+            self._emit(event_handler, "log", "Supervisor выбрал direct: отвечаю без планирования")
             direct = self._answer_directly(task)
             self.memory.add(MemoryItem(role="assistant", content=direct))
             self._emit(event_handler, "final", direct)
