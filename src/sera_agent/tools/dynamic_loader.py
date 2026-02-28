@@ -4,6 +4,8 @@ import importlib.util
 import logging
 from pathlib import Path
 
+from langchain_core.tools import BaseTool
+
 from sera_agent.safety.policy import SafetyPolicy
 from sera_agent.tools.base import ToolRegistry
 
@@ -35,5 +37,7 @@ class DynamicToolLoader:
         if not hasattr(module, "build_tool"):
             raise RuntimeError("Dynamic tool must define build_tool()")
         tool = module.build_tool()
+        if not isinstance(tool, BaseTool):
+            raise RuntimeError("build_tool() must return LangChain BaseTool")
         self.registry.register(tool)
         LOGGER.info("Dynamic tool loaded: %s", tool.name)

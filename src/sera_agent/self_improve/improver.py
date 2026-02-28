@@ -18,13 +18,12 @@ class SelfImprover:
         LOGGER.warning("Attempting self-improvement for missing tool: %s", missing_tool)
         system = dedent(
             """
-            You are generating a secure python tool plugin.
+            You generate LangChain tools.
             Output only python code.
             Requirements:
-            - define class implementing .name, .description, .schema(), .run(arguments)
-            - define function build_tool() returning tool instance
+            - create one @tool function named exactly as requested
+            - define build_tool() returning that decorated tool object
             - no dangerous imports (os, subprocess, ctypes, socket, shutil)
-            - deterministic and robust error handling
             """
         ).strip()
         user = dedent(
