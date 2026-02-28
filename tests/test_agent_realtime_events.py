@@ -88,3 +88,49 @@ def test_run_survives_tool_exception(tmp_path: Path) -> None:
     final = agent.run("Сделай тест")
 
     assert "Tool error: boom" in final
+
+
+class FailingLLM:
+    def __init__(self) -> None:
+        self.reflection_calls = 0
+
+    def complete_json(self, system: str, user: str, schema_hint: str, max_tokens: int = 1024) -> dict[str, object]:
+        if '"steps"' in schema_hint:
+            return {"steps": ["первый шаг"]}
+        if '"critique"' in schema_hint:
+            self.reflection_calls += 1
+            return {
+                "critique": "Нужно добавить проверку после ошибки.",
+                "next_steps": ["попробовать альтернативный подход"],
+            }
+        return {
+            "thought": "failed",
+            "tool_calls": [],
+            "final_output": "ошибка",
+            "success": False,
+        }
+
+
+def test_run_writes_scratchpad_and_reflects_on_failure(tmp_path: Path) -> None:
+    llm = FailingLLM()
+    config = AgentConfig(
+        runtime=RuntimeConfig(model_path=tmp_path / "model.gguf"),
+        memory=MemoryConfig(db_path=tmp_path / "memory.sqlite3"),
+        safety=SafetyConfig(working_dir=tmp_path),
+    )
+    agent = SeraAgent(
+        config=config,
+        llm=llm,
+        memory=MemoryStore(config.memory.db_path),
+        tools=ToolRegistry(),
+        improver=DummyImprover(),
+    )
+
+    events: list[dict[str, str]] = []
+    agent.run("Сделай тест", event_handler=events.append)
+
+    scratchpad = (tmp_path / "memory.md").read_text(encoding="utf-8")
+    assert "## Dynamic Plan" in scratchpad
+    assert "Reflection" in scratchpad
+    assert llm.reflection_calls > 0
+    assert any(event["kind"] == "reflection" for event in events)
