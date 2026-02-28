@@ -41,6 +41,33 @@ class SeraAgent:
             return
         event_handler({"kind": kind, "message": message})
 
+    def _is_simple_question(self, task: str) -> bool:
+        normalized = task.strip().lower()
+        if not normalized:
+            return True
+        quick_patterns = (
+            "привет",
+            "hello",
+            "hi",
+            "как дела",
+            "кто ты",
+            "что ты умеешь",
+            "доброе утро",
+            "добрый день",
+        )
+        return any(normalized == pattern for pattern in quick_patterns)
+
+    def _answer_directly(self, task: str) -> str:
+        system = "You are a concise assistant. Answer directly and do not plan or call any tools."
+        user = dedent(
+            f"""
+            User task: {task}
+
+            Provide a short direct answer in the same language as the user.
+            """
+        ).strip()
+        return self.llm.complete(system=system, user=user, max_tokens=300).strip()
+
     def _plan(self, task: str, event_handler: Callable[[dict[str, str]], None] | None = None) -> list[str]:
         self._emit(event_handler, "log", "Поиск релевантной памяти...")
         context = self.memory.search(task, limit=self.config.memory.max_results)
@@ -146,7 +173,7 @@ class SeraAgent:
         event_handler: Callable[[dict[str, str]], None] | None = None,
     ) -> StepResult:
         self._emit(event_handler, "log", f"Подготовка шага: {step}")
-        system = "You execute one step and decide tool calls when needed."
+        system = "You execute one step and decide tool calls when needed. For casual greetings or basic knowledge, avoid network tools unless the user explicitly asks to search online or current web data is required."
         user = dedent(
             f"""
             Global task: {task}
@@ -206,6 +233,14 @@ class SeraAgent:
         LOGGER.info("Agent run started: %s", task)
         self._emit(event_handler, "log", f"Старт задачи: {task}")
         self.memory.add(MemoryItem(role="user", content=task))
+
+        if self._is_simple_question(task):
+            self._emit(event_handler, "log", "Простой запрос: отвечаю сразу без планирования")
+            direct = self._answer_directly(task)
+            self.memory.add(MemoryItem(role="assistant", content=direct))
+            self._emit(event_handler, "final", direct)
+            return direct
+
         plan = self._plan(task, event_handler=event_handler)
         self._initialize_scratchpad(task=task, plan=plan)
         LOGGER.info("Plan generated with %d steps", len(plan))

@@ -40,3 +40,13 @@ def test_build_agent_registers_shell_when_enabled(tmp_path: Path) -> None:
     agent = build_agent(cfg)
 
     assert agent.tools.has("shell")
+
+
+def test_build_agent_registers_split_web_tools(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.yaml"
+    _write_config(cfg, allow_shell=False)
+
+    agent = build_agent(cfg)
+
+    assert agent.tools.has("web_search")
+    assert agent.tools.has("fetch_url")

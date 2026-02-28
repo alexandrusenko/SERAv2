@@ -134,3 +134,41 @@ def test_run_writes_scratchpad_and_reflects_on_failure(tmp_path: Path) -> None:
     assert "Reflection" in scratchpad
     assert llm.reflection_calls > 0
     assert any(event["kind"] == "reflection" for event in events)
+
+
+class DirectAnswerLLM:
+    def __init__(self) -> None:
+        self.complete_calls = 0
+        self.complete_json_calls = 0
+
+    def complete(self, system: str, user: str, max_tokens: int = 1024) -> str:
+        self.complete_calls += 1
+        return "Привет!"
+
+    def complete_json(self, system: str, user: str, schema_hint: str, max_tokens: int = 1024) -> dict[str, object]:
+        self.complete_json_calls += 1
+        return {"steps": ["should not happen"]}
+
+
+def test_simple_greeting_is_answered_without_plan(tmp_path: Path) -> None:
+    llm = DirectAnswerLLM()
+    config = AgentConfig(
+        runtime=RuntimeConfig(model_path=tmp_path / "model.gguf"),
+        memory=MemoryConfig(db_path=tmp_path / "memory.sqlite3"),
+        safety=SafetyConfig(working_dir=tmp_path),
+    )
+    agent = SeraAgent(
+        config=config,
+        llm=llm,
+        memory=MemoryStore(config.memory.db_path),
+        tools=ToolRegistry(),
+        improver=DummyImprover(),
+    )
+
+    events: list[dict[str, str]] = []
+    final = agent.run("Привет", event_handler=events.append)
+
+    assert final == "Привет!"
+    assert llm.complete_calls == 1
+    assert llm.complete_json_calls == 0
+    assert not any(event["kind"] == "plan" for event in events)
