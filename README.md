@@ -30,6 +30,23 @@ pip install -e .
 python -m sera_agent.main --config config.yaml "Собери план миграции проекта на Python 3.14"
 ```
 
+## Выбор backend для LLM
+
+Теперь `runtime.backend` поддерживает два режима с единым интерфейсом `LLMEngine`:
+
+- `llama_cpp` — локальный `*.gguf` через `llama-cpp-python`;
+- `lmstudio` — подключение к локальному OpenAI-совместимому API LM Studio.
+
+Пример в `config.yaml`:
+
+```yaml
+runtime:
+  backend: "llama_cpp" # или "lmstudio"
+  model_path: "C:/path/to/model.gguf" # требуется для llama_cpp
+  lmstudio_base_url: "http://127.0.0.1:1234"
+  lmstudio_model: "local-model"
+```
+
 ## Режимы запуска
 
 - Одноразовый CLI-запрос: `python -m sera_agent.main --config config.yaml "..."`
