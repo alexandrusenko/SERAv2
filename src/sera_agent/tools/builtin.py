@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+from html.parser import HTMLParser
 from dataclasses import dataclass
-from pathlib import Path
 
 from sera_agent.safety.policy import SafetyPolicy
 from sera_agent.tools.base import ToolResult
@@ -73,10 +73,59 @@ class ShellTool:
 
 
 @dataclass(slots=True)
-class HttpGetTool:
+class WebSearchTool:
     safety: SafetyPolicy
-    name: str = "http_get"
-    description: str = "GET URL and return text. args: {url}"
+    name: str = "web_search"
+    description: str = "Search the web with DDGS and return top results. args: {query, max_results?}"
+
+    def run(self, arguments: dict[str, object]) -> ToolResult:
+        self.safety.assert_network_allowed()
+        query = str(arguments.get("query", "")).strip()
+        max_results_raw = arguments.get("max_results", 5)
+        try:
+            max_results = min(max(int(max_results_raw), 1), 10)
+        except (TypeError, ValueError):
+            max_results = 5
+
+        if not query:
+            return ToolResult(False, "Missing query")
+
+        try:
+            from ddgs import DDGS
+
+            with DDGS() as ddgs:
+                rows = list(ddgs.text(query, max_results=max_results))
+            compact = [
+                {
+                    "title": str(item.get("title", "")),
+                    "url": str(item.get("href", "")),
+                    "snippet": str(item.get("body", "")),
+                }
+                for item in rows
+            ]
+            return ToolResult(True, json.dumps(compact, ensure_ascii=False))
+        except Exception as exc:
+            return ToolResult(False, f"Web search error: {exc}")
+
+
+class _TextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        if data.strip():
+            self.parts.append(data.strip())
+
+    def text(self) -> str:
+        return "\n".join(self.parts)
+
+
+@dataclass(slots=True)
+class FetchUrlTool:
+    safety: SafetyPolicy
+    name: str = "fetch_url"
+    description: str = "Fetch URL and return readable text content. args: {url}"
 
     def run(self, arguments: dict[str, object]) -> ToolResult:
         self.safety.assert_network_allowed()
@@ -86,6 +135,9 @@ class HttpGetTool:
 
             with urllib.request.urlopen(url, timeout=20) as response:  # noqa: S310
                 body = response.read().decode("utf-8", errors="replace")
-            return ToolResult(True, body[:10000])
+            parser = _TextExtractor()
+            parser.feed(body)
+            parsed = parser.text() or body
+            return ToolResult(True, parsed[:10000])
         except Exception as exc:
             return ToolResult(False, f"HTTP error: {exc}")

@@ -14,7 +14,7 @@ from sera_agent.runtime.llm_engine import LLMEngine
 from sera_agent.safety.policy import SafetyPolicy
 from sera_agent.self_improve.improver import SelfImprover
 from sera_agent.tools.base import ToolRegistry
-from sera_agent.tools.builtin import HttpGetTool, ReadFileTool, ShellTool, WriteFileTool
+from sera_agent.tools.builtin import FetchUrlTool, ReadFileTool, ShellTool, WebSearchTool, WriteFileTool
 from sera_agent.tools.dynamic_loader import DynamicToolLoader
 
 LOGGER = logging.getLogger(__name__)
@@ -37,7 +37,8 @@ def build_agent(config_path: Path) -> SeraAgent:
     registry.register(WriteFileTool(safety=safety))
     if config.safety.allow_shell:
         registry.register(ShellTool(safety=safety))
-    registry.register(HttpGetTool(safety=safety))
+    registry.register(WebSearchTool(safety=safety))
+    registry.register(FetchUrlTool(safety=safety))
 
     loader = DynamicToolLoader(tools_dir=Path("dynamic_tools"), safety=safety, registry=registry)
     improver = SelfImprover(llm=llm, loader=loader)
