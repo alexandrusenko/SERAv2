@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
 import threading
 from pathlib import Path
 from queue import Queue
@@ -14,6 +16,7 @@ from pydantic import BaseModel
 from sera_agent.main import build_agent
 
 app = FastAPI(title="SERA v2 UI")
+LOGGER = logging.getLogger(__name__)
 
 INDEX_HTML = """
 <!doctype html>
@@ -135,6 +138,17 @@ class RunRequest(BaseModel):
     config_path: str = "config.yaml"
 
 
+@app.on_event("startup")
+def initialize_agent() -> None:
+    config_path = Path(os.getenv("SERA_UI_CONFIG_PATH", "config.yaml"))
+    agent = build_agent(config_path)
+    agent.llm.load()
+    app.state.agent = agent
+    app.state.config_path = config_path
+    app.state.run_lock = threading.Lock()
+    LOGGER.info("UI agent initialized with config: %s", config_path)
+
+
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     return HTMLResponse(INDEX_HTML)
@@ -144,6 +158,14 @@ def index() -> HTMLResponse:
 async def run(request: RunRequest) -> StreamingResponse:
     if not request.task.strip():
         raise HTTPException(status_code=400, detail="Task is empty")
+    if Path(request.config_path) != app.state.config_path:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"UI service was initialized with '{app.state.config_path}'. "
+                "Restart service to use another config_path."
+            ),
+        )
 
     queue: Queue[str | None] = Queue()
 
@@ -152,8 +174,8 @@ async def run(request: RunRequest) -> StreamingResponse:
 
     def worker() -> None:
         try:
-            agent = build_agent(Path(request.config_path))
-            agent.run(request.task, event_handler=emitter)
+            with app.state.run_lock:
+                app.state.agent.run(request.task, event_handler=emitter)
         except Exception as exc:  # noqa: BLE001
             emitter({"kind": "log", "message": f"Ошибка выполнения: {exc}"})
         finally:
