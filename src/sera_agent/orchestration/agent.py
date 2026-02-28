@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from textwrap import dedent
 from typing import Callable
 
@@ -30,6 +31,14 @@ class SeraAgent:
         self.tools = tools
         self.improver = improver
         self.scratchpad_path = self.config.safety.working_dir / "memory.md"
+        self.idle_reflection_threshold_seconds = 600
+
+    def _supervisor_route(self, task: str) -> str:
+        if not task.strip():
+            return "idle"
+        if self._is_simple_question(task):
+            return "direct"
+        return "task"
 
     def _emit(
         self,
@@ -94,6 +103,26 @@ class SeraAgent:
         self._emit(event_handler, "plan", "\n".join(f"{idx + 1}. {step}" for idx, step in enumerate(plan)))
         return plan
 
+    def _replan(self, task: str, failed_step: str, critique: str, previous_plan: list[str]) -> list[str]:
+        system = "You are a resilient planner. Replan after failures while keeping objective unchanged."
+        user = dedent(
+            f"""
+            Global task: {task}
+            Previous plan:
+            {json.dumps(previous_plan, ensure_ascii=False)}
+            Failed step: {failed_step}
+            Critic feedback: {critique}
+
+            Return JSON with field "steps": a new robust plan.
+            """
+        ).strip()
+        schema_hint = '{"steps": ["step1", "step2"]}'
+        payload = self.llm.complete_json(system=system, user=user, schema_hint=schema_hint)
+        steps = payload.get("steps", [])
+        if not isinstance(steps, list) or not steps:
+            return previous_plan
+        return [str(s) for s in steps[: self.config.planner_max_steps]]
+
     def _read_scratchpad(self) -> str:
         if not self.scratchpad_path.exists():
             return ""
@@ -132,7 +161,7 @@ class SeraAgent:
         if marker_from in scratchpad:
             self._write_scratchpad(scratchpad.replace(marker_from, marker_to, 1))
 
-    def _reflect_on_failure(self, task: str, step: str, output: str) -> str:
+    def _reflect_on_failure(self, task: str, step: str, output: str) -> tuple[str, list[str]]:
         scratchpad = self._read_scratchpad()
         system = "You are a strict critic. Explain why the attempt failed and how to adapt the next action."
         user = dedent(
@@ -158,7 +187,7 @@ class SeraAgent:
         if next_steps:
             self._append_scratchpad_section("Adaptive updates", "\n".join(f"- [ ] {item}" for item in next_steps))
         self._append_scratchpad_section("Reflection", critique)
-        return critique
+        return critique, next_steps
 
     def _adapt_plan(self, plan: list[str], current_index: int, next_steps: list[str]) -> list[str]:
         if not next_steps:
@@ -173,7 +202,7 @@ class SeraAgent:
         event_handler: Callable[[dict[str, str]], None] | None = None,
     ) -> StepResult:
         self._emit(event_handler, "log", f"Подготовка шага: {step}")
-        system = "You execute one step and decide tool calls when needed. For casual greetings or basic knowledge, avoid network tools unless the user explicitly asks to search online or current web data is required."
+        system = "You are the Actor module. Execute one step, choose tools, and report verifiable result. For casual greetings or basic knowledge, avoid network tools unless the user explicitly asks to search online or current web data is required."
         user = dedent(
             f"""
             Global task: {task}
@@ -226,15 +255,98 @@ class SeraAgent:
         final_output = str(payload.get("final_output", ""))
         success = bool(payload.get("success", False))
         combined = "\n".join([*outputs, final_output]).strip()
+        self._append_scratchpad_section("Execution Log", f"Step: {step}\n\n{combined}")
         self._emit(event_handler, "step", f"{step}\n\n{combined}")
         return StepResult(step=step, success=success, output=combined, tool_calls=tool_calls)
+
+    def _extract_missing_module(self, output: str) -> str | None:
+        patterns = [
+            r"No module named ['\"]([^'\"]+)['\"]",
+            r"ModuleNotFoundError:\s*([^\s]+)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, output)
+            if match:
+                return match.group(1).strip()
+        return None
+
+    def _try_auto_install_dependency(
+        self,
+        task: str,
+        step: str,
+        output: str,
+        event_handler: Callable[[dict[str, str]], None] | None = None,
+    ) -> bool:
+        missing_module = self._extract_missing_module(output)
+        if not missing_module:
+            return False
+        if not self.tools.has("shell"):
+            return False
+
+        install_cmd = f"python -m pip install {missing_module}"
+        self._emit(event_handler, "log", f"Автоисправление: пытаюсь установить зависимость {missing_module}")
+        result = self.tools.get("shell").run({"command": install_cmd})
+        self.memory.add(
+            MemoryItem(
+                role="assistant",
+                content=f"AUTO_FIX for {task} / {step}: {install_cmd}\nsuccess={result.success}\n{result.output}",
+            )
+        )
+        self._append_scratchpad_section(
+            "Auto-fix",
+            f"Command: {install_cmd}\nSuccess: {result.success}\nOutput:\n{result.output[:1500]}",
+        )
+        return result.success
+
+    def run_idle_cycle(self, event_handler: Callable[[dict[str, str]], None] | None = None) -> str:
+        self._emit(event_handler, "log", "Idle mode: запуск мета-познания")
+        failures = self.memory.search("error failure exception", limit=6)
+        failure_context = "\n".join(f"[{item.role}] {item.content}" for item in failures)
+        system = "You are the Metacognition module. Generate one practical self-improvement task."
+        user = dedent(
+            f"""
+            Recent failure context:
+            {failure_context}
+
+            Return JSON with fields:
+            - learning_goal: string
+            - experiment_plan: list of strings
+            - self_test: string (a tiny verifiable check)
+            """
+        ).strip()
+        schema_hint = '{"learning_goal":"...","experiment_plan":["..."],"self_test":"..."}'
+        payload = self.llm.complete_json(system=system, user=user, schema_hint=schema_hint, max_tokens=1200)
+        goal = str(payload.get("learning_goal") or "Уточнить пробелы в навыках")
+        plan = payload.get("experiment_plan") or []
+        steps = [str(item) for item in plan if str(item).strip()]
+        self_test = str(payload.get("self_test") or "assert True")
+
+        reflection = dedent(
+            f"""
+            Idle Reflection
+            Goal: {goal}
+            Plan:
+            {chr(10).join(f"- {item}" for item in steps) if steps else "- Сформировать новый микро-эксперимент"}
+            Self-test: {self_test}
+            """
+        ).strip()
+        self.memory.add(MemoryItem(role="assistant", content=reflection))
+        self._append_scratchpad_section("Metacognition", reflection)
+        self._emit(event_handler, "reflection", reflection)
+        return reflection
 
     def run(self, task: str, event_handler: Callable[[dict[str, str]], None] | None = None) -> str:
         LOGGER.info("Agent run started: %s", task)
         self._emit(event_handler, "log", f"Старт задачи: {task}")
         self.memory.add(MemoryItem(role="user", content=task))
 
-        if self._is_simple_question(task):
+        route = self._supervisor_route(task)
+        if route == "idle":
+            idle_result = self.run_idle_cycle(event_handler=event_handler)
+            self._emit(event_handler, "final", idle_result)
+            return idle_result
+
+        if route == "direct":
             self._emit(event_handler, "log", "Простой запрос: отвечаю сразу без планирования")
             direct = self._answer_directly(task)
             self.memory.add(MemoryItem(role="assistant", content=direct))
@@ -268,8 +380,12 @@ class SeraAgent:
                 self._append_scratchpad_section("Execution failure", f"Step: {step}\n\n{result.output}")
                 LOGGER.warning("Step failed (count=%d)", failures)
                 self._emit(event_handler, "log", f"Шаг завершился неуспешно, подряд ошибок: {failures}")
-                critique = self._reflect_on_failure(task=task, step=step, output=result.output)
+                critique, critic_steps = self._reflect_on_failure(task=task, step=step, output=result.output)
                 self._emit(event_handler, "reflection", critique)
+
+                if self._try_auto_install_dependency(task=task, step=step, output=result.output, event_handler=event_handler):
+                    self._emit(event_handler, "log", "Автоисправление зависимости успешно, повтор шага")
+                    continue
 
                 adaptive_steps = []
                 scratchpad = self._read_scratchpad()
@@ -278,7 +394,9 @@ class SeraAgent:
                         candidate = line.replace("- [ ] ", "", 1).strip()
                         if candidate and candidate not in plan[idx + 1 :]:
                             adaptive_steps.append(candidate)
+                adaptive_steps = [*critic_steps, *adaptive_steps]
                 plan = self._adapt_plan(plan=plan, current_index=idx, next_steps=adaptive_steps[:2])
+                plan = self._replan(task=task, failed_step=step, critique=critique, previous_plan=plan)
                 self._emit(event_handler, "plan", "\n".join(f"{i + 1}. {s}" for i, s in enumerate(plan)))
                 if failures >= self.config.improve_after_failures:
                     self.improver.attempt_create_missing_tool(

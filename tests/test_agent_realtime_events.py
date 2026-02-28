@@ -172,3 +172,95 @@ def test_simple_greeting_is_answered_without_plan(tmp_path: Path) -> None:
     assert llm.complete_calls == 1
     assert llm.complete_json_calls == 0
     assert not any(event["kind"] == "plan" for event in events)
+
+
+class IdleLLM:
+    def complete_json(self, system: str, user: str, schema_hint: str, max_tokens: int = 1024) -> dict[str, object]:
+        return {
+            "learning_goal": "Изучить устойчивые паттерны отладки",
+            "experiment_plan": ["Смоделировать ошибку импорта", "Проверить автокоррекцию"],
+            "self_test": "assert 1 + 1 == 2",
+        }
+
+
+def test_empty_task_triggers_idle_metacognition(tmp_path: Path) -> None:
+    config = AgentConfig(
+        runtime=RuntimeConfig(model_path=tmp_path / "model.gguf"),
+        memory=MemoryConfig(db_path=tmp_path / "memory.sqlite3"),
+        safety=SafetyConfig(working_dir=tmp_path),
+    )
+    agent = SeraAgent(
+        config=config,
+        llm=IdleLLM(),
+        memory=MemoryStore(config.memory.db_path),
+        tools=ToolRegistry(),
+        improver=DummyImprover(),
+    )
+
+    events: list[dict[str, str]] = []
+    final = agent.run("", event_handler=events.append)
+
+    assert "Idle Reflection" in final
+    assert any(event["kind"] == "reflection" for event in events)
+
+
+class ShellRecorderTool:
+    name = "shell"
+    description = "records install command"
+
+    def __init__(self) -> None:
+        self.commands: list[str] = []
+
+    def run(self, arguments: dict[str, object]) -> ToolResult:
+        command = str(arguments.get("command", ""))
+        self.commands.append(command)
+        return ToolResult(True, "installed")
+
+
+class AutoFixLLM:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete_json(self, system: str, user: str, schema_hint: str, max_tokens: int = 1024) -> dict[str, object]:
+        if '"steps"' in schema_hint:
+            return {"steps": ["запустить python-скрипт"]}
+        if '"critique"' in schema_hint:
+            return {"critique": "Не хватает пакета", "next_steps": []}
+        self.calls += 1
+        if self.calls == 1:
+            return {
+                "thought": "attempt 1",
+                "tool_calls": [],
+                "final_output": "ModuleNotFoundError: No module named 'some_lib'",
+                "success": False,
+            }
+        return {
+            "thought": "attempt 2",
+            "tool_calls": [],
+            "final_output": "Готово",
+            "success": True,
+        }
+
+
+def test_run_auto_installs_missing_dependency_via_shell(tmp_path: Path) -> None:
+    config = AgentConfig(
+        runtime=RuntimeConfig(model_path=tmp_path / "model.gguf"),
+        memory=MemoryConfig(db_path=tmp_path / "memory.sqlite3"),
+        safety=SafetyConfig(working_dir=tmp_path),
+    )
+    shell = ShellRecorderTool()
+    tools = ToolRegistry()
+    tools.register(shell)
+    agent = SeraAgent(
+        config=config,
+        llm=AutoFixLLM(),
+        memory=MemoryStore(config.memory.db_path),
+        tools=tools,
+        improver=DummyImprover(),
+    )
+
+    final = agent.run("Поставь библиотеку и выполни код")
+
+    assert "Готово" in final
+    assert shell.commands
+    assert shell.commands[0] == "python -m pip install some_lib"
