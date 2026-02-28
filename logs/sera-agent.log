@@ -1,0 +1,125 @@
+2026-02-27 17:10:07,776 | INFO     | sera_agent.orchestration.agent | Agent run started: Собери план миграции проекта на Python 3.14
+2026-02-27 17:10:07,782 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\Qwen3.5-27B-Q4_K_M.gguf
+2026-02-27 17:10:09,007 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\Qwen3.5-27B-Q4_K_M.gguf
+2026-02-27 17:31:20,308 | INFO     | sera_agent.orchestration.agent | Agent run started: Собери план миграции проекта на Python 3.14
+2026-02-27 17:31:20,315 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\Qwen3.5-27B-Q4_K_M.gguf
+2026-02-27 17:31:20,548 | ERROR    | __main__ | Agent failed to start or run: Failed to initialize llama-cpp model. Path: C:\Users\Xandr\Documents\models\Qwen3.5-27B-Q4_K_M.gguf. Python: 3.14.2. Possible causes: unsupported GGUF for installed llama-cpp, corrupted file, insufficient RAM/VRAM, or incompatible llama-cpp build (especially on Python 3.14). Try upgrading/reinstalling llama-cpp-python and testing with a smaller known-good GGUF.
+2026-02-27 17:31:51,812 | INFO     | sera_agent.orchestration.agent | Agent run started: Собери план миграции проекта на Python 3.14
+2026-02-27 17:31:51,830 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\Qwen3.5-27B-Q4_K_M.gguf
+2026-02-27 17:31:52,049 | ERROR    | __main__ | Agent failed to start or run: Failed to initialize llama-cpp model. Path: C:\Users\Xandr\Documents\models\Qwen3.5-27B-Q4_K_M.gguf. Python: 3.14.2. Possible causes: unsupported GGUF for installed llama-cpp, corrupted file, insufficient RAM/VRAM, or incompatible llama-cpp build (especially on Python 3.14). Try upgrading/reinstalling llama-cpp-python and testing with a smaller known-good GGUF.
+2026-02-27 17:34:25,748 | INFO     | sera_agent.orchestration.agent | Agent run started: Собери план миграции проекта на Python 3.14
+2026-02-27 17:34:25,753 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q4_k_m.gguf
+2026-02-27 17:34:49,176 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-27 17:35:47,683 | INFO     | sera_agent.orchestration.agent | Plan generated with 6 steps
+2026-02-27 17:35:47,690 | INFO     | sera_agent.orchestration.agent | Executing step 1/6: shell: python3.14 --version
+2026-02-27 17:36:14,831 | ERROR    | __main__ | Agent failed to start or run: Shell execution is disabled by policy
+2026-02-27 17:38:29,055 | INFO     | sera_agent.orchestration.agent | Agent run started: Привет, как дела?
+2026-02-27 17:38:29,062 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q4_k_m.gguf
+2026-02-27 17:38:51,445 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-27 17:39:20,024 | INFO     | sera_agent.orchestration.agent | Plan generated with 1 steps
+2026-02-27 17:39:20,028 | INFO     | sera_agent.orchestration.agent | Executing step 1/1: shell: echo 'Привет! У меня все хорошо, спасибо. А у тебя?' > response.txt
+2026-02-27 17:41:27,068 | INFO     | sera_agent.orchestration.agent | Agent run started: Собери план миграции проекта на Python 3.14
+2026-02-27 17:41:27,075 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q4_k_m.gguf
+2026-02-27 17:41:47,288 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-27 17:42:44,350 | INFO     | sera_agent.orchestration.agent | Plan generated with 5 steps
+2026-02-27 17:42:44,351 | INFO     | sera_agent.orchestration.agent | Executing step 1/5: shell: python3.14 --version
+2026-02-27 17:43:11,861 | ERROR    | __main__ | Agent failed to start or run: Shell execution is disabled by policy
+2026-02-28 01:33:25,437 | INFO     | sera_agent.orchestration.agent | Agent run started: Привет, ты кто?
+2026-02-28 01:33:25,448 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q4_k_m.gguf
+2026-02-28 01:33:45,781 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 01:34:13,025 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 01:34:13,033 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: write_file: {path, content}
+2026-02-28 01:34:48,847 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: read_file: {path}
+2026-02-28 01:35:46,749 | INFO     | sera_agent.orchestration.agent | Agent run started: А что ты умеешь?
+2026-02-28 01:35:46,762 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q4_k_m.gguf
+2026-02-28 01:36:08,020 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 01:36:26,329 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 01:36:26,330 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: http_get {url}
+2026-02-28 01:36:58,405 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 01:36:58,405 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: write_file {path, content}
+2026-02-28 03:21:48,454 | INFO     | sera_agent.orchestration.agent | Agent run started: привет, ты кто?
+2026-02-28 03:21:48,461 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q3_k_m.gguf
+2026-02-28 03:22:03,725 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 03:22:28,394 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 03:22:28,396 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: write_file: {path, content}
+2026-02-28 03:22:56,077 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: read_file: {path}
+2026-02-28 03:24:01,297 | INFO     | sera_agent.orchestration.agent | Agent run started: Хорошо, сходи в интернет и узнай текущую погоду в москве
+2026-02-28 03:24:01,308 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q3_k_m.gguf
+2026-02-28 03:24:14,378 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 03:24:30,943 | INFO     | sera_agent.orchestration.agent | Plan generated with 1 steps
+2026-02-28 03:24:30,946 | INFO     | sera_agent.orchestration.agent | Executing step 1/1: http_get: https://api.openweathermap.org/data/2.5/weather?q=Moscow&appid=YOUR_API_KEY&units=metric
+2026-02-28 03:24:58,280 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 03:28:43,165 | INFO     | sera_agent.orchestration.agent | Agent run started: узнай погоду в москве через интернет. для этого попробуй написать и запустить Python код. для поиска можешь использовать библиотеку duckduckgo_search или ее другую версию ddgs
+2026-02-28 03:28:43,183 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q3_k_m.gguf
+2026-02-28 03:28:55,383 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 03:29:55,634 | INFO     | sera_agent.orchestration.agent | Plan generated with 8 steps
+2026-02-28 03:29:55,645 | INFO     | sera_agent.orchestration.agent | Executing step 1/8: Определить текущую версию Python, используемую в проекте
+2026-02-28 03:30:55,229 | INFO     | sera_agent.orchestration.agent | Executing step 2/8: Проверить совместимость кода с Python 3.14
+2026-02-28 03:31:55,626 | INFO     | sera_agent.orchestration.agent | Executing step 3/8: Обновить синтаксис и библиотеки, если необходимо
+2026-02-28 03:32:28,360 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 03:32:28,360 | INFO     | sera_agent.orchestration.agent | Executing step 4/8: Тестирование обновленного кода на различных платформах
+2026-02-28 03:33:10,455 | WARNING  | sera_agent.orchestration.agent | Step failed (count=2)
+2026-02-28 03:33:10,455 | WARNING  | sera_agent.self_improve.improver | Attempting self-improvement for missing tool: task_specific_helper
+2026-02-28 03:43:38,617 | INFO     | sera_agent.orchestration.agent | Agent run started: привет
+2026-02-28 03:43:38,624 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q3_k_m.gguf
+2026-02-28 03:43:51,889 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 03:44:13,681 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 03:44:13,683 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: write_file: {path, content}
+2026-02-28 03:44:40,235 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: read_file: {path}
+2026-02-28 03:44:55,609 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 03:45:11,072 | INFO     | sera_agent.orchestration.agent | Agent run started: что ты умеешь?
+2026-02-28 03:45:11,080 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q3_k_m.gguf
+2026-02-28 03:45:23,023 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 03:45:39,034 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 03:45:39,035 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: http_get: {url}
+2026-02-28 03:46:22,925 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: write_file: {path, content}
+2026-02-28 03:50:04,823 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-14b-instruct-q5_k_m.gguf
+2026-02-28 03:50:14,986 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 03:50:14,987 | INFO     | sera_agent.ui.server | UI agent initialized with config: config.yaml
+2026-02-28 03:50:46,326 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-14b-instruct-q5_k_m.gguf
+2026-02-28 03:50:52,140 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 03:50:52,140 | INFO     | sera_agent.ui.server | UI agent initialized with config: config.yaml
+2026-02-28 03:51:01,006 | INFO     | sera_agent.orchestration.agent | Agent run started: привет
+2026-02-28 03:51:07,505 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 03:51:07,505 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: write_file: {path, content}
+2026-02-28 03:51:20,689 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: read_file: {path}
+2026-02-28 03:51:31,036 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 03:51:49,058 | INFO     | sera_agent.orchestration.agent | Agent run started: что ты умеешь?
+2026-02-28 03:51:57,353 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 03:51:57,354 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: write_file: {path, content}
+2026-02-28 03:52:20,089 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: read_file: {path}
+2026-02-28 03:52:30,757 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 03:52:59,299 | INFO     | sera_agent.runtime.llm_engine | Loading GGUF model: C:\Users\Xandr\Documents\models\qwen2.5-coder-32b-instruct-q3_k_m.gguf
+2026-02-28 03:53:16,980 | INFO     | sera_agent.runtime.llm_engine | Model loaded successfully
+2026-02-28 03:53:16,980 | INFO     | sera_agent.ui.server | UI agent initialized with config: config.yaml
+2026-02-28 03:53:24,602 | INFO     | sera_agent.orchestration.agent | Agent run started: привет
+2026-02-28 03:53:38,331 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 03:53:38,331 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: write_file: {path, content}
+2026-02-28 03:54:03,763 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: read_file: {path}
+2026-02-28 03:54:18,380 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 03:54:46,800 | INFO     | sera_agent.orchestration.agent | Agent run started: какая погода сегодня в москве?
+2026-02-28 03:55:00,246 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 03:55:00,246 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: http_get: {url}
+2026-02-28 03:55:39,326 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 03:55:39,327 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: write_file: {path, content}
+2026-02-28 03:56:05,561 | WARNING  | sera_agent.orchestration.agent | Step failed (count=2)
+2026-02-28 03:56:05,562 | WARNING  | sera_agent.self_improve.improver | Attempting self-improvement for missing tool: task_specific_helper
+2026-02-28 03:57:43,729 | INFO     | sera_agent.tools.dynamic_loader | Dynamic tool loaded: task_specific_helper
+2026-02-28 03:57:43,729 | INFO     | sera_agent.self_improve.improver | Self-improvement success: dynamic_tools\task_specific_helper.py
+2026-02-28 10:15:33,272 | INFO     | sera_agent.orchestration.agent | Agent run started: какая погода сегодня в москве?
+2026-02-28 10:15:46,386 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 10:15:46,387 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: http_get: {url}
+2026-02-28 10:16:13,667 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 10:16:13,667 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: task_specific_helper: {query}
+2026-02-28 10:21:30,177 | INFO     | sera_agent.orchestration.agent | Agent run started: Проверь погоду в москве. тебе для этого нужно сходить в интернет. можно не использовать API а спарсить это со страницы например https://yandex.ru/pogoda/ru/moscow?lat=55.936752&lon=37.361007
+2026-02-28 10:22:01,532 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 10:22:01,532 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: http_get: {url}
+2026-02-28 10:22:35,968 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 10:22:35,968 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: write_file: {path, content}
+2026-02-28 10:23:16,097 | WARNING  | sera_agent.orchestration.agent | Step failed (count=2)
+2026-02-28 10:23:16,097 | WARNING  | sera_agent.self_improve.improver | Attempting self-improvement for missing tool: task_specific_helper
+2026-02-28 10:25:37,051 | INFO     | sera_agent.orchestration.agent | Agent run started: Проверь погоду в москве. тебе для этого нужно сходить в интернет. Напиши скрипт, который через библиотекку requests получает содержимое страницы https://yandex.ru/pogoda/ru/moscow?lat=55.936752&lon=37.361007          далее вызови этот скрипт и получи содержимое страницы.    далее ты должен проанализировать содержимое страницы и найти где там погода указана.
+2026-02-28 10:26:38,049 | INFO     | sera_agent.orchestration.agent | Plan generated with 2 steps
+2026-02-28 10:26:38,049 | INFO     | sera_agent.orchestration.agent | Executing step 1/2: http_get: https://yandex.ru/pogoda/ru/moscow?lat=55.936752&lon=37.361007
+2026-02-28 10:27:16,398 | WARNING  | sera_agent.orchestration.agent | Step failed (count=1)
+2026-02-28 10:27:16,399 | INFO     | sera_agent.orchestration.agent | Executing step 2/2: write_file: {path, content}

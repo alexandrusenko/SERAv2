@@ -1,5 +1,5 @@
 runtime:
-  model_path: "Qwen3.5-27B-Q4_K_M.gguf"
+  model_path: "C:/Users/Xandr/Documents/models/qwen2.5-coder-32b-instruct-q3_k_m.gguf"
   n_ctx: 32768
   n_gpu_layers: -1
   n_batch: 1024

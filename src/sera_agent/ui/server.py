@@ -119,7 +119,7 @@ INDEX_HTML = """
           const { value, done } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split("\n");
+          const parts = buffer.split("\\n");
           buffer = parts.pop() || "";
 
           for (const line of parts) {
