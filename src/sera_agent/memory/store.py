@@ -211,6 +211,32 @@ class MemoryStore:
             return self.latest(limit)
         return [item for _, item in scored[:limit]]
 
+
+    def last_qa_pairs(self, limit_pairs: int = 5) -> list[tuple[str, str]]:
+        """Return the last N (user, assistant) dialogue pairs in chronological order."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT role, content
+                FROM short_term_memories
+                ORDER BY id ASC
+                """
+            ).fetchall()
+
+        pairs: list[tuple[str, str]] = []
+        pending_user: str | None = None
+        for role, content in rows:
+            if role == "user":
+                pending_user = str(content)
+                continue
+            if role == "assistant" and pending_user is not None:
+                pairs.append((pending_user, str(content)))
+                pending_user = None
+
+        if limit_pairs <= 0:
+            return []
+        return pairs[-limit_pairs:]
+
     def latest(self, limit: int = 10) -> list[MemoryItem]:
         with self._connect() as conn:
             rows = conn.execute(

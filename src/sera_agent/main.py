@@ -14,7 +14,13 @@ from sera_agent.runtime.llm_engine import LLMEngine
 from sera_agent.safety.policy import SafetyPolicy
 from sera_agent.self_improve.improver import SelfImprover
 from sera_agent.tools.base import ToolRegistry
-from sera_agent.tools.builtin import FetchUrlTool, ReadFileTool, ShellTool, WebSearchTool, WriteFileTool
+from sera_agent.tools.builtin import (
+    build_fetch_url_tool,
+    build_read_file_tool,
+    build_shell_tool,
+    build_web_search_tool,
+    build_write_file_tool,
+)
 from sera_agent.tools.dynamic_loader import DynamicToolLoader
 
 LOGGER = logging.getLogger(__name__)
@@ -33,12 +39,12 @@ def build_agent(config_path: Path) -> SeraAgent:
         long_term_search_limit=config.memory.long_term_search_limit,
     )
     registry = ToolRegistry()
-    registry.register(ReadFileTool(safety=safety))
-    registry.register(WriteFileTool(safety=safety))
+    registry.register(build_read_file_tool(safety))
+    registry.register(build_write_file_tool(safety))
     if config.safety.allow_shell:
-        registry.register(ShellTool(safety=safety))
-    registry.register(WebSearchTool(safety=safety))
-    registry.register(FetchUrlTool(safety=safety))
+        registry.register(build_shell_tool(safety))
+    registry.register(build_web_search_tool(safety))
+    registry.register(build_fetch_url_tool(safety))
 
     loader = DynamicToolLoader(tools_dir=Path("dynamic_tools"), safety=safety, registry=registry)
     improver = SelfImprover(llm=llm, loader=loader)

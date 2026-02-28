@@ -301,3 +301,79 @@ def test_run_returns_single_summarized_final_message(tmp_path: Path) -> None:
 
     assert final == "Итоговый ответ без служебных шагов"
     assert any(event["kind"] == "final" and event["message"] == final for event in events)
+
+
+class ContextCaptureLLM:
+    def __init__(self) -> None:
+        self.users: list[str] = []
+
+    def complete_json(self, system: str, user: str, schema_hint: str, max_tokens: int = 1024) -> dict[str, object]:
+        del system, schema_hint, max_tokens
+        self.users.append(user)
+        return {
+            "thought": "done",
+            "tool_calls": [],
+            "final_output": "ok",
+            "success": True,
+        }
+
+
+def test_agent_passes_sliding_window_of_last_five_qa_pairs(tmp_path: Path) -> None:
+    llm = ContextCaptureLLM()
+    config = AgentConfig(
+        runtime=RuntimeConfig(model_path=tmp_path / "model.gguf"),
+        memory=MemoryConfig(db_path=tmp_path / "memory.sqlite3"),
+        safety=SafetyConfig(working_dir=tmp_path),
+    )
+    agent = SeraAgent(
+        config=config,
+        llm=llm,
+        memory=MemoryStore(config.memory.db_path),
+        tools=ToolRegistry(),
+        improver=DummyImprover(),
+    )
+
+    for i in range(6):
+        agent.run(f"Вопрос {i}")
+
+    payload = llm.users[-1]
+    assert "Контекст последних 5 диалогов" in payload
+    assert "Q: Вопрос 0" in payload
+    assert "Q: Вопрос 4" in payload
+    assert "Q: Вопрос 5" not in payload
+    assert "Текущий запрос пользователя:\nВопрос 5" in payload
+
+
+def test_agent_passes_relevant_long_term_semantic_memory_in_context(tmp_path: Path) -> None:
+    llm = ContextCaptureLLM()
+    config = AgentConfig(
+        runtime=RuntimeConfig(model_path=tmp_path / "model.gguf"),
+        memory=MemoryConfig(
+            db_path=tmp_path / "memory.sqlite3",
+            long_term_chunk_size=2,
+            short_term_search_limit=50,
+            long_term_search_limit=50,
+        ),
+        safety=SafetyConfig(working_dir=tmp_path),
+    )
+    agent = SeraAgent(
+        config=config,
+        llm=llm,
+        memory=MemoryStore(
+            config.memory.db_path,
+            long_term_chunk_size=config.memory.long_term_chunk_size,
+            short_term_search_limit=config.memory.short_term_search_limit,
+            long_term_search_limit=config.memory.long_term_search_limit,
+        ),
+        tools=ToolRegistry(),
+        improver=DummyImprover(),
+    )
+
+    agent.run("Сохрани заметку: python asyncio event loop")
+    agent.run("Сохрани заметку: kafka stream consumer lag")
+    agent.run("Что важно про asyncio loop?")
+
+    payload = llm.users[-1]
+    assert "Релевантные данные из долговременной семантической памяти" in payload
+    assert "semantic_keys" in payload
+    assert "Текущий запрос пользователя:\nЧто важно про asyncio loop?" in payload

@@ -1,0 +1,2 @@
+class BaseChatModel:
+    pass
