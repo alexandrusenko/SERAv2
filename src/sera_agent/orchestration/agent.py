@@ -77,6 +77,35 @@ class SeraAgent:
         ).strip()
         return self.llm.complete(system=system, user=user, max_tokens=300).strip()
 
+    def _summarize_final_answer(self, task: str, transcripts: list[str]) -> str:
+        raw_result = "\n\n".join(transcripts).strip()
+        if not raw_result:
+            return "Задача завершена, но агент не получил содержательных результатов."
+
+        if not hasattr(self.llm, "complete"):
+            return raw_result
+
+        system = (
+            "You are a helpful assistant. Provide one final user-facing answer based on completed steps. "
+            "Do not include internal logs or step-by-step execution traces."
+        )
+        user = dedent(
+            f"""
+            Original user task: {task}
+
+            Agent execution transcript:
+            {raw_result}
+
+            Produce a concise final response in the same language as the user's task.
+            """
+        ).strip()
+        try:
+            summarized = self.llm.complete(system=system, user=user, max_tokens=600).strip()
+            return summarized or raw_result
+        except Exception:  # noqa: BLE001
+            LOGGER.exception("Failed to synthesize final answer from transcript")
+            return raw_result
+
     def _plan(self, task: str, event_handler: Callable[[dict[str, str]], None] | None = None) -> list[str]:
         self._emit(event_handler, "log", "Поиск релевантной памяти...")
         context = self.memory.search(task, limit=self.config.memory.max_results)
@@ -417,7 +446,7 @@ class SeraAgent:
             LOGGER.warning("Execution stopped by iteration guard")
             self._append_scratchpad_section("Guard", "Iteration limit reached, stopping execution")
 
-        final = "\n\n".join(transcripts)
+        final = self._summarize_final_answer(task=task, transcripts=transcripts)
         self.memory.add(MemoryItem(role="assistant", content=f"FINAL:\n{final}"))
         self._emit(event_handler, "final", final)
         return final
