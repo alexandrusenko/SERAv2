@@ -29,6 +29,7 @@ class SeraAgent:
         self.memory = memory
         self.tools = tools
         self.improver = improver
+        self.scratchpad_path = self.config.safety.working_dir / "memory.md"
 
     def _emit(
         self,
@@ -65,6 +66,78 @@ class SeraAgent:
         plan = [str(s) for s in steps[: self.config.planner_max_steps]]
         self._emit(event_handler, "plan", "\n".join(f"{idx + 1}. {step}" for idx, step in enumerate(plan)))
         return plan
+
+    def _read_scratchpad(self) -> str:
+        if not self.scratchpad_path.exists():
+            return ""
+        return self.scratchpad_path.read_text(encoding="utf-8")
+
+    def _write_scratchpad(self, content: str) -> None:
+        self.scratchpad_path.parent.mkdir(parents=True, exist_ok=True)
+        self.scratchpad_path.write_text(content, encoding="utf-8")
+
+    def _initialize_scratchpad(self, task: str, plan: list[str]) -> None:
+        tasks = "\n".join(f"- [ ] {step}" for step in plan)
+        content = dedent(
+            f"""
+            # Scratchpad
+            Task: {task}
+
+            ## Dynamic Plan
+            {tasks}
+
+            ## Execution Log
+
+            ## Reflections
+            """
+        ).strip()
+        self._write_scratchpad(content)
+
+    def _append_scratchpad_section(self, title: str, body: str) -> None:
+        current = self._read_scratchpad().rstrip()
+        addition = f"\n\n### {title}\n{body.strip()}\n"
+        self._write_scratchpad(f"{current}{addition}")
+
+    def _mark_step(self, step: str, done: bool) -> None:
+        marker_from = f"- [ ] {step}"
+        marker_to = f"- [{'x' if done else '!'}] {step}"
+        scratchpad = self._read_scratchpad()
+        if marker_from in scratchpad:
+            self._write_scratchpad(scratchpad.replace(marker_from, marker_to, 1))
+
+    def _reflect_on_failure(self, task: str, step: str, output: str) -> str:
+        scratchpad = self._read_scratchpad()
+        system = "You are a strict critic. Explain why the attempt failed and how to adapt the next action."
+        user = dedent(
+            f"""
+            Task: {task}
+            Failed step: {step}
+            Failure details:
+            {output}
+
+            Scratchpad state:
+            {scratchpad}
+
+            Return JSON with fields:
+            - critique: string
+            - next_steps: list of short strings
+            """
+        ).strip()
+        schema_hint = '{"critique":"...","next_steps":["..."]}'
+        payload = self.llm.complete_json(system=system, user=user, schema_hint=schema_hint, max_tokens=1200)
+        critique = str(payload.get("critique") or payload.get("thought") or payload.get("final_output") or "No critique")
+        next_steps_raw = payload.get("next_steps", [])
+        next_steps = [str(item) for item in next_steps_raw if str(item).strip()]
+        if next_steps:
+            self._append_scratchpad_section("Adaptive updates", "\n".join(f"- [ ] {item}" for item in next_steps))
+        self._append_scratchpad_section("Reflection", critique)
+        return critique
+
+    def _adapt_plan(self, plan: list[str], current_index: int, next_steps: list[str]) -> list[str]:
+        if not next_steps:
+            return plan
+        updated = [*plan[:current_index], *next_steps, *plan[current_index + 1 :]]
+        return updated[: self.config.planner_max_steps]
 
     def _execute_step(
         self,
@@ -134,31 +207,62 @@ class SeraAgent:
         self._emit(event_handler, "log", f"Старт задачи: {task}")
         self.memory.add(MemoryItem(role="user", content=task))
         plan = self._plan(task, event_handler=event_handler)
+        self._initialize_scratchpad(task=task, plan=plan)
         LOGGER.info("Plan generated with %d steps", len(plan))
         self._emit(event_handler, "log", f"План готов, шагов: {len(plan)}")
 
         failures = 0
         transcripts: list[str] = []
 
-        for idx, step in enumerate(plan, start=1):
-            LOGGER.info("Executing step %d/%d: %s", idx, len(plan), step)
-            self._emit(event_handler, "log", f"Выполнение шага {idx}/{len(plan)}")
+        idx = 0
+        max_iterations = self.config.planner_max_steps * 2
+        iterations = 0
+
+        while idx < len(plan) and iterations < max_iterations:
+            iterations += 1
+            step = plan[idx]
+            LOGGER.info("Executing step %d/%d: %s", idx + 1, len(plan), step)
+            self._emit(event_handler, "log", f"Выполнение шага {idx + 1}/{len(plan)}")
             result = self._execute_step(task=task, step=step, event_handler=event_handler)
-            transcripts.append(f"STEP {idx}: {result.step}\n{result.output}")
+            transcripts.append(f"STEP {idx + 1}: {result.step}\n{result.output}")
             self.memory.add(MemoryItem(role="assistant", content=result.output))
 
             if not result.success:
                 failures += 1
+                self._mark_step(step, done=False)
+                self._append_scratchpad_section("Execution failure", f"Step: {step}\n\n{result.output}")
                 LOGGER.warning("Step failed (count=%d)", failures)
                 self._emit(event_handler, "log", f"Шаг завершился неуспешно, подряд ошибок: {failures}")
+                critique = self._reflect_on_failure(task=task, step=step, output=result.output)
+                self._emit(event_handler, "reflection", critique)
+
+                adaptive_steps = []
+                scratchpad = self._read_scratchpad()
+                for line in scratchpad.splitlines():
+                    if line.startswith("- [ ] "):
+                        candidate = line.replace("- [ ] ", "", 1).strip()
+                        if candidate and candidate not in plan[idx + 1 :]:
+                            adaptive_steps.append(candidate)
+                plan = self._adapt_plan(plan=plan, current_index=idx, next_steps=adaptive_steps[:2])
+                self._emit(event_handler, "plan", "\n".join(f"{i + 1}. {s}" for i, s in enumerate(plan)))
                 if failures >= self.config.improve_after_failures:
                     self.improver.attempt_create_missing_tool(
                         missing_tool="task_specific_helper",
                         task_context=f"Repeated failures for task: {task}. Recent step: {step}",
                     )
                     self._emit(event_handler, "log", "Запущено улучшение task_specific_helper после повторных ошибок")
+                if adaptive_steps:
+                    continue
+                idx += 1
             else:
                 failures = 0
+                self._mark_step(step, done=True)
+                self._append_scratchpad_section("Execution success", f"Step: {step}\n\n{result.output}")
+                idx += 1
+
+        if iterations >= max_iterations:
+            LOGGER.warning("Execution stopped by iteration guard")
+            self._append_scratchpad_section("Guard", "Iteration limit reached, stopping execution")
 
         final = "\n\n".join(transcripts)
         self.memory.add(MemoryItem(role="assistant", content=f"FINAL:\n{final}"))
