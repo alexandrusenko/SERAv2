@@ -1,4 +1,5 @@
 runtime:
+  backend: "llama_cpp"  # llama_cpp | lmstudio
   model_path: "C:/Users/Xandr/Documents/models/qwen2.5-coder-32b-instruct-q3_k_m.gguf"
   n_ctx: 32768
   n_gpu_layers: -1
@@ -8,6 +9,8 @@ runtime:
   top_p: 0.92
   repeat_penalty: 1.05
   verbose: false
+  lmstudio_base_url: "http://127.0.0.1:1234"
+  lmstudio_model: "local-model"
 
 memory:
   db_path: "data/memory.sqlite3"
