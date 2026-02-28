@@ -242,6 +242,22 @@ class AutoFixLLM:
         }
 
 
+class SummarizingLLM:
+    def complete_json(self, system: str, user: str, schema_hint: str, max_tokens: int = 1024) -> dict[str, object]:
+        if '"steps"' in schema_hint:
+            return {"steps": ["сделать поиск"]}
+        return {
+            "thought": "done",
+            "tool_calls": [],
+            "final_output": "STEP 1 internal",
+            "success": True,
+        }
+
+    def complete(self, system: str, user: str, max_tokens: int = 1024) -> str:
+        assert "Agent execution transcript" in user
+        return "Итоговый ответ без служебных шагов"
+
+
 def test_run_auto_installs_missing_dependency_via_shell(tmp_path: Path) -> None:
     config = AgentConfig(
         runtime=RuntimeConfig(model_path=tmp_path / "model.gguf"),
@@ -264,3 +280,24 @@ def test_run_auto_installs_missing_dependency_via_shell(tmp_path: Path) -> None:
     assert "Готово" in final
     assert shell.commands
     assert shell.commands[0] == "python -m pip install some_lib"
+
+
+def test_run_returns_single_summarized_final_message(tmp_path: Path) -> None:
+    config = AgentConfig(
+        runtime=RuntimeConfig(model_path=tmp_path / "model.gguf"),
+        memory=MemoryConfig(db_path=tmp_path / "memory.sqlite3"),
+        safety=SafetyConfig(working_dir=tmp_path),
+    )
+    agent = SeraAgent(
+        config=config,
+        llm=SummarizingLLM(),
+        memory=MemoryStore(config.memory.db_path),
+        tools=ToolRegistry(),
+        improver=DummyImprover(),
+    )
+
+    events: list[dict[str, str]] = []
+    final = agent.run("Найди новости", event_handler=events.append)
+
+    assert final == "Итоговый ответ без служебных шагов"
+    assert any(event["kind"] == "final" and event["message"] == final for event in events)
