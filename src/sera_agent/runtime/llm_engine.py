@@ -173,6 +173,27 @@ class LLMEngine:
                 return self._complete_with_loaded_backend(system=system, user=user, max_tokens=max_tokens)
         raise RuntimeError("LLM completion failed")
 
+
+    def complete_with_tool_calling(
+        self,
+        *,
+        system: str,
+        user: str,
+        tools_schema: list[dict[str, Any]],
+        max_tokens: int = 1024,
+    ) -> dict[str, Any]:
+        schema_hint = (
+            '{"thought":"...","tool_calls":[{"name":"tool_name","arguments":{}}],'
+            '"final_output":"...","success":true}'
+        )
+        tools_block = json.dumps(tools_schema, ensure_ascii=False)
+        composed_user = (
+            f"{user}\n\nAvailable tools in JSON schema:\n{tools_block}\n\n"
+            "Return strictly JSON for tool calling. "
+            "If no tool is required return empty tool_calls and fill final_output."
+        )
+        return self.complete_json(system=system, user=composed_user, schema_hint=schema_hint, max_tokens=max_tokens)
+
     def complete_json(self, system: str, user: str, schema_hint: str, max_tokens: int = 1024) -> dict[str, Any]:
         prompt = (
             f"{user}\n\nReturn strict JSON only. Schema hint:\n{schema_hint}\n"

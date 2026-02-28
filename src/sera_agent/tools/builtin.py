@@ -7,7 +7,7 @@ from html.parser import HTMLParser
 from dataclasses import dataclass
 
 from sera_agent.safety.policy import SafetyPolicy
-from sera_agent.tools.base import ToolResult
+from sera_agent.tools.base import ToolResult, ToolSpec
 
 LOGGER = logging.getLogger(__name__)
 
@@ -17,6 +17,13 @@ class ReadFileTool:
     safety: SafetyPolicy
     name: str = "read_file"
     description: str = "Read a UTF-8 text file from the safe working directory. args: {path}"
+
+    def schema(self) -> ToolSpec:
+        return ToolSpec(
+            name=self.name,
+            description=self.description,
+            args_schema={"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
+        )
 
     def run(self, arguments: dict[str, object]) -> ToolResult:
         raw_path = str(arguments.get("path", ""))
@@ -32,6 +39,17 @@ class WriteFileTool:
     name: str = "write_file"
     description: str = "Write UTF-8 text file to safe working directory. args: {path, content}"
 
+    def schema(self) -> ToolSpec:
+        return ToolSpec(
+            name=self.name,
+            description=self.description,
+            args_schema={
+                "type": "object",
+                "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
+                "required": ["path", "content"],
+            },
+        )
+
     def run(self, arguments: dict[str, object]) -> ToolResult:
         raw_path = str(arguments.get("path", ""))
         content = str(arguments.get("content", ""))
@@ -46,6 +64,13 @@ class ShellTool:
     safety: SafetyPolicy
     name: str = "shell"
     description: str = "Execute shell command. args: {command}"
+
+    def schema(self) -> ToolSpec:
+        return ToolSpec(
+            name=self.name,
+            description=self.description,
+            args_schema={"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]},
+        )
 
     def run(self, arguments: dict[str, object]) -> ToolResult:
         self.safety.assert_shell_allowed()
@@ -77,6 +102,17 @@ class WebSearchTool:
     safety: SafetyPolicy
     name: str = "web_search"
     description: str = "Search the web with DDGS and return top results. args: {query, max_results?}"
+
+    def schema(self) -> ToolSpec:
+        return ToolSpec(
+            name=self.name,
+            description=self.description,
+            args_schema={
+                "type": "object",
+                "properties": {"query": {"type": "string"}, "max_results": {"type": "integer"}},
+                "required": ["query"],
+            },
+        )
 
     def run(self, arguments: dict[str, object]) -> ToolResult:
         self.safety.assert_network_allowed()
@@ -126,6 +162,13 @@ class FetchUrlTool:
     safety: SafetyPolicy
     name: str = "fetch_url"
     description: str = "Fetch URL and return readable text content. args: {url}"
+
+    def schema(self) -> ToolSpec:
+        return ToolSpec(
+            name=self.name,
+            description=self.description,
+            args_schema={"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
+        )
 
     def run(self, arguments: dict[str, object]) -> ToolResult:
         self.safety.assert_network_allowed()

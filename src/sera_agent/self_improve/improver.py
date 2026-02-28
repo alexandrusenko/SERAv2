@@ -21,7 +21,7 @@ class SelfImprover:
             You are generating a secure python tool plugin.
             Output only python code.
             Requirements:
-            - define class implementing .name, .description, .run(arguments)
+            - define class implementing .name, .description, .schema(), .run(arguments)
             - define function build_tool() returning tool instance
             - no dangerous imports (os, subprocess, ctypes, socket, shutil)
             - deterministic and robust error handling
