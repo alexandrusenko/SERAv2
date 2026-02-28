@@ -332,6 +332,49 @@ class SeraAgent:
         updated = [*plan[:current_index], *next_steps, *plan[current_index + 1 :]]
         return updated[: self.config.planner_max_steps]
 
+    def _invoke_actor_tool_call(
+        self,
+        *,
+        task: str,
+        step: str,
+        observations: list[str],
+    ) -> dict[str, Any]:
+        system = (
+            "Ты модуль Actor в SERA (LangChain tool-calling style). "
+            "Реши, какие инструменты вызвать на текущей итерации, а когда достаточно — верни final_output."
+        )
+        user = dedent(
+            f"""
+            Глобальная задача: {task}
+            Текущий шаг: {step}
+
+            История наблюдений/результатов инструментов:
+            {chr(10).join(observations) if observations else 'нет'}
+
+            Доступные инструменты:
+            {self.tools.descriptions()}
+            """
+        ).strip()
+        if hasattr(self.llm, "complete_with_tool_calling"):
+            specs = [
+                {"name": spec.name, "description": spec.description, "parameters": spec.args_schema}
+                for spec in self.tools.specs()
+            ]
+            return dict(
+                self.llm.complete_with_tool_calling(
+                    system=system,
+                    user=user,
+                    tools_schema=specs,
+                    max_tokens=1500,
+                )
+            )
+
+        schema_hint = (
+            '{"thought":"...","tool_calls":[{"name":"read_file","arguments":{"path":"a.txt"}}],'
+            '"final_output":"...","success":true}'
+        )
+        return self._invoke_json_chain(system=system, user=user, schema_hint=schema_hint, max_tokens=1500)
+
     def _execute_step(
         self,
         task: str,
@@ -339,58 +382,59 @@ class SeraAgent:
         event_handler: Callable[[dict[str, str]], None] | None = None,
     ) -> StepResult:
         self._emit(event_handler, "log", f"Подготовка шага: {step}")
-        system = (
-            "Ты модуль Actor в SERA. Выполни один шаг, при необходимости выбери инструменты и верни проверяемый результат. "
-            "Для приветствий и базовых знаний не используй сетевые инструменты без явного запроса пользователя."
-        )
-        user = dedent(
-            f"""
-            Глобальная задача: {task}
-            Текущий шаг: {step}
-            Доступные инструменты:
-            {self.tools.descriptions()}
-
-            Верни действие и результат.
-            """
-        ).strip()
-        schema_hint = (
-            '{"thought":"...","tool_calls":[{"name":"read_file","arguments":{"path":"a.txt"}}],'
-            '"final_output":"...","success":true}'
-        )
-        payload = self._invoke_json_chain(system=system, user=user, schema_hint=schema_hint, max_tokens=1500)
-        calls_raw = payload.get("tool_calls", [])
         tool_calls: list[ToolCall] = []
-        outputs: list[str] = []
-        self._emit(event_handler, "log", f"Инструментов для вызова: {len(calls_raw)}")
+        observations: list[str] = []
+        final_output = ""
+        success = False
 
-        for c in calls_raw:
-            name = str(c.get("name", ""))
-            args_obj = c.get("arguments", {})
-            args = args_obj if isinstance(args_obj, dict) else {}
-            tool_calls.append(ToolCall(name=name, arguments=args))
-            self._emit(event_handler, "log", f"Вызов инструмента: {name}({json.dumps(args, ensure_ascii=False)})")
-            if not self.tools.has(name):
-                self.improver.attempt_create_missing_tool(missing_tool=name, task_context=f"Task: {task}; Step: {step}")
-                self._emit(event_handler, "log", f"Инструмент {name} отсутствовал, запущено самоулучшение")
+        for iteration in range(1, 4):
+            payload = self._invoke_actor_tool_call(task=task, step=step, observations=observations)
+            calls_raw = payload.get("tool_calls", [])
+            if not isinstance(calls_raw, list):
+                calls_raw = []
+            self._emit(event_handler, "log", f"Tool-calling итерация {iteration}, вызовов: {len(calls_raw)}")
+
+            if not calls_raw:
+                final_output = str(payload.get("final_output", "")).strip()
+                success = bool(payload.get("success", bool(final_output)))
+                break
+
+            for c in calls_raw:
+                name = str(c.get("name", "")).strip()
+                args_obj = c.get("arguments", {})
+                args = args_obj if isinstance(args_obj, dict) else {}
+                tool_calls.append(ToolCall(name=name, arguments=args))
+                self._emit(event_handler, "log", f"Вызов инструмента: {name}({json.dumps(args, ensure_ascii=False)})")
+
                 if not self.tools.has(name):
-                    outputs.append(f"{name}: success=False output=Tool is unavailable")
+                    self.improver.attempt_create_missing_tool(
+                        missing_tool=name,
+                        task_context=(
+                            "LangChain tool-calling runtime. "
+                            f"Task: {task}; Step: {step}; Observations: {chr(10).join(observations[-4:])}"
+                        ),
+                    )
+                    self._emit(event_handler, "log", f"Инструмент {name} отсутствовал, создан динамически")
+
+                if not self.tools.has(name):
+                    observations.append(f"{name}: success=False output=Tool is unavailable")
                     continue
 
-            tool = self.tools.get(name)
-            try:
-                result = tool.run(args)
-            except Exception as exc:  # noqa: BLE001
-                LOGGER.exception("Tool call failed: %s", name)
-                error_output = f"Tool error: {exc}"
-                outputs.append(f"{name}: success=False output={error_output[:500]}")
-                continue
+                tool = self.tools.get(name)
+                try:
+                    result = tool.run(args)
+                except Exception as exc:  # noqa: BLE001
+                    LOGGER.exception("Tool call failed: %s", name)
+                    observations.append(f"{name}: success=False output=Tool error: {exc}")
+                    continue
 
-            self._emit(event_handler, "log", f"Результат {name}: success={result.success}")
-            outputs.append(f"{name}: success={result.success} output={result.output[:500]}")
+                self._emit(event_handler, "log", f"Результат {name}: success={result.success}")
+                observations.append(f"{name}: success={result.success} output={result.output[:700]}")
 
-        final_output = str(payload.get("final_output", ""))
-        success = bool(payload.get("success", False))
-        combined = "\n".join([*outputs, final_output]).strip()
+            final_output = str(payload.get("final_output", "")).strip()
+            success = bool(payload.get("success", False))
+
+        combined = "\n".join([*observations, final_output]).strip()
         self._append_scratchpad_section("Execution Log", f"Step: {step}\n\n{combined}")
         self._emit(event_handler, "step", f"{step}\n\n{combined}")
         return StepResult(step=step, success=success, output=combined, tool_calls=tool_calls)
