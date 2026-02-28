@@ -30,6 +30,10 @@ INDEX_HTML = """
       .container { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; height: 100vh; padding: 12px; box-sizing: border-box; }
       .panel { background: #111827; border: 1px solid #374151; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; }
       .panel h2 { margin: 0; padding: 12px; font-size: 16px; border-bottom: 1px solid #374151; }
+      #status { margin: 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid #4b5563; background: #030712; color: #cbd5e1; font-size: 14px; }
+      #status.running { border-color: #2563eb; color: #93c5fd; }
+      #status.success { border-color: #16a34a; color: #86efac; }
+      #status.error { border-color: #dc2626; color: #fca5a5; }
       #chat, #logs { flex: 1; overflow-y: auto; padding: 12px; white-space: pre-wrap; line-height: 1.4; }
       #chat .user { color: #93c5fd; margin-bottom: 8px; }
       #chat .agent { color: #d1fae5; margin-bottom: 12px; }
@@ -45,6 +49,7 @@ INDEX_HTML = """
     <div class="container">
       <section class="panel">
         <h2>Чат с агентом</h2>
+        <div id="status">Статус: ожидание запроса</div>
         <div id="chat"></div>
         <div id="composer">
           <input id="task" placeholder="Введите задачу для SERA v2" />
@@ -61,6 +66,12 @@ INDEX_HTML = """
       const logs = document.getElementById("logs");
       const taskInput = document.getElementById("task");
       const sendButton = document.getElementById("send");
+      const status = document.getElementById("status");
+
+      function setStatus(kind, text) {
+        status.className = kind;
+        status.textContent = "Статус: " + text;
+      }
 
       function addChat(cls, text) {
         const el = document.createElement("div");
@@ -85,6 +96,7 @@ INDEX_HTML = """
         sendButton.disabled = true;
         logs.innerHTML = "";
         addChat("user", "Вы: " + task);
+        setStatus("running", "агент выполняет задачу...");
 
         const response = await fetch("/run", {
           method: "POST",
@@ -94,6 +106,7 @@ INDEX_HTML = """
 
         if (!response.ok || !response.body) {
           addLog("log", "Не удалось запустить задачу");
+          setStatus("error", "не удалось запустить задачу");
           sendButton.disabled = false;
           return;
         }
@@ -114,6 +127,8 @@ INDEX_HTML = """
             const payload = JSON.parse(line.slice(5));
             if (payload.kind === "final") {
               addChat("agent", "SERA: " + payload.message);
+            } else if (payload.kind === "status") {
+              setStatus(payload.state || "", payload.message);
             } else {
               addLog(payload.kind === "plan" ? "plan" : "log", payload.message);
             }
@@ -172,12 +187,18 @@ async def run(request: RunRequest) -> StreamingResponse:
     def emitter(event: dict[str, str]) -> None:
         queue.put(f"data:{json.dumps(event, ensure_ascii=False)}\n\n")
 
+    def emit_status(state: str, message: str) -> None:
+        emitter({"kind": "status", "state": state, "message": message})
+
     def worker() -> None:
         try:
+            emit_status("running", "агент выполняет задачу...")
             with app.state.run_lock:
                 app.state.agent.run(request.task, event_handler=emitter)
+            emit_status("success", "задача завершена успешно")
         except Exception as exc:  # noqa: BLE001
             emitter({"kind": "log", "message": f"Ошибка выполнения: {exc}"})
+            emit_status("error", "задача завершилась ошибкой")
         finally:
             queue.put(None)
 

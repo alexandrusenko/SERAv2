@@ -54,3 +54,7 @@ def test_ui_reuses_initialized_agent_for_multiple_requests(monkeypatch) -> None:
     assert built_agents[0].run_calls == ["first", "second"]
     assert "done:first" in first_payload
     assert "done:second" in second_payload
+    assert "\"kind\": \"status\", \"state\": \"running\"" in first_payload
+    assert "\"kind\": \"status\", \"state\": \"success\"" in first_payload
+    assert "\"kind\": \"status\", \"state\": \"running\"" in second_payload
+    assert "\"kind\": \"status\", \"state\": \"success\"" in second_payload
